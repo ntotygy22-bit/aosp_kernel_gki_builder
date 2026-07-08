@@ -17,14 +17,26 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.repository.owner.id == github.event.sender.id
     env:
-      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
-      CCACHE_NOHASHDIR: "true"
-      CCACHE_HARDLINK: "true"
+      LLVM: 1
+      LLVM_IAS: 1
+      LD: ld.lld
+      CC: clang
+      
     steps:
     - name: Check out
       uses: actions/checkout@v4.1.1
 
-    - name: Read the configuration
+    - name: Setup Environment
+      run: |
+        sudo apt update
+        # Install clang, lld, dan llvm versi terbaru
+        sudo apt install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler rename libelf-dev dwarves libncurses-dev clang lld llvm
+        # Debug: Pastikan lld terinstall
+        which ld.lld
+        ld.lld --version
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+
+    - name: Read Configuration
       run: |
         CONFIG_ENV=config.properties.gki_1461
         echo "KERNEL_SOURCE=$(cat $CONFIG_ENV | grep -w "KERNEL_SOURCE" | head -n 1 | cut -d "=" -f 2)" >> $GITHUB_ENV
@@ -38,17 +50,6 @@ jobs:
         echo "TC_CUSTOM_CMDS=$(cat $CONFIG_ENV | grep -w "TC_CUSTOM_CMDS" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
         echo "EXTRA_CMDS=$(cat $CONFIG_ENV | grep -w "EXTRA_CMDS" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
         echo "CUSTOM_CMDS=$(cat $CONFIG_ENV | grep -w "CUSTOM_CMDS" | head -n 1 | cut -d ":" -f 2)" >> $GITHUB_ENV
-
-    - name: Setup Environment
-      run: |
-        sudo apt update
-        sudo apt install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler rename libelf-dev dwarves libncurses-dev
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
-
-    - name: Download Clang Toolchain (AOSP)
-      run: |
-        git clone https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 -b main --depth=1 $GITHUB_WORKSPACE/clang-toolchain
-        echo "PATH=$GITHUB_WORKSPACE/clang-toolchain/clang-r487747c/bin:$PATH" >> $GITHUB_ENV
 
     - name: Set Swap to 10GB
       uses: pierotofy/set-swap-space@master
@@ -66,24 +67,24 @@ jobs:
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         curl -LSs "${{ env.KERNELSU_INSTALLER }}" | bash -s ${{ env.KERNELSU_TAG }}
 
-    - name: Setting Configuration
+    - name: Build Kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        
+        # PENTING: Export ulang env agar kebaca oleh sub-shell make
+        export LLVM=1
+        export LLVM_IAS=1
+        export LD=ld.lld
+        export CC=clang
+        
         CONFIG_PATH=arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
+        
         if [ -n "${{ env.CUSTOM_CMDS }}" ]; then eval "${{ env.CUSTOM_CMDS }}"; fi
         if [ ${{ env.DISABLE-LTO }} = true ]; then
-            echo "CONFIG_LTO=n" >> $CONFIG_PATH
-            echo "CONFIG_LTO_CLANG=n" >> $CONFIG_PATH
-            echo "CONFIG_THINLTO=n" >> $CONFIG_PATH
+            sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' $CONFIG_PATH || echo "CONFIG_LTO=n" >> $CONFIG_PATH
             echo "CONFIG_LTO_NONE=y" >> $CONFIG_PATH
         fi
 
-    - name: Build kernel
-      run: |
-        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        export CLANG_TRIPLE=aarch64-linux-gnu-
-        export CROSS_COMPILE=aarch64-linux-gnu-
-        # Menggunakan LLVM resmi dari AOSP
-        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
-        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
-        
+        # Jalankan build
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
