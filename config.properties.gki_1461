@@ -26,4 +26,4 @@ KERNELSU_TAG=main
 
 # Build Optimization
 ENABLE_CCACHE=true
-DISABLE-LTO=true
+DISABLE-LTO=false
