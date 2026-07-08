@@ -21,6 +21,10 @@ jobs:
       LLVM_IAS: 1
       LD: ld.lld
       CC: clang
+      # Menambahkan variabel standar untuk kernel Android 14
+      CLANG_TRIPLE: aarch64-linux-gnu-
+      CROSS_COMPILE: aarch64-linux-gnu-
+      CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
       
     steps:
     - name: Check out
@@ -29,11 +33,7 @@ jobs:
     - name: Setup Environment
       run: |
         sudo apt update
-        # Install clang, lld, dan llvm versi terbaru
         sudo apt install -y git ccache automake flex lzop bison gperf build-essential zip curl zlib1g-dev g++-multilib libxml2-utils bzip2 libbz2-dev squashfs-tools pngcrush schedtool dpkg-dev liblz4-tool make optipng maven libssl-dev pwgen libswitch-perl policycoreutils minicom libxml-sax-base-perl libxml-simple-perl bc libc6-dev-i386 libx11-dev lib32z-dev libgl1-mesa-dev xsltproc unzip device-tree-compiler rename libelf-dev dwarves libncurses-dev clang lld llvm
-        # Debug: Pastikan lld terinstall
-        which ld.lld
-        ld.lld --version
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace
 
     - name: Read Configuration
@@ -71,12 +71,6 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         
-        # PENTING: Export ulang env agar kebaca oleh sub-shell make
-        export LLVM=1
-        export LLVM_IAS=1
-        export LD=ld.lld
-        export CC=clang
-        
         CONFIG_PATH=arch/${{ env.ARCH }}/configs/${{ env.KERNEL_CONFIG }}
         
         if [ -n "${{ env.CUSTOM_CMDS }}" ]; then eval "${{ env.CUSTOM_CMDS }}"; fi
@@ -85,6 +79,13 @@ jobs:
             echo "CONFIG_LTO_NONE=y" >> $CONFIG_PATH
         fi
 
-        # Jalankan build
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
-        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
+        # Jalankan build dengan parameter compiler yang eksplisit
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
+        make -j$(nproc --all) O=out ARCH=${{ env.ARCH }} CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
+
+    - name: Upload Kernel
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kernel-Output
+        path: kernel_workspace/android-kernel/out/arch/arm64/boot/Image*
+        
