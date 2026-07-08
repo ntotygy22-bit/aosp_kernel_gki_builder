@@ -96,10 +96,9 @@ jobs:
             echo "CONFIG_OVERLAY_FS=y" >> $CONFIG_PATH
         fi
 
-    - name: Build kernel
+        - name: Build kernel
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
-        # LLVM=1 adalah kunci untuk pakai clang/ld.lld
-        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
-        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
-        
+        # Gue tambahin LD=ld.lld biar sistem nggak nyari-nyari lagi
+        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.KERNEL_CONFIG }}
+        make -j$(nproc --all) LLVM=1 LLVM_IAS=1 LD=ld.lld O=out ARCH=${{ env.ARCH }} ${{ env.TC_CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }}
