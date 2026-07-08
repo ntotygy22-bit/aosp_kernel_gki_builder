@@ -45,19 +45,26 @@ jobs:
       run: |
         cd kernel_workspace/android-kernel
         
-        # 1. Generate .config pertama kali
+        # 1. Generate config awal
         make O=out ARCH=arm64 ${{ env.KERNEL_CONFIG }}
         
-        # 2. FORCE PATCH: Edit file .config yang sudah jadi (ini tidak akan ditimpa)
-        # Fix VA_BITS
-        sed -i 's/CONFIG_ARM64_VA_BITS=[0-9]*/CONFIG_ARM64_VA_BITS=39/g' out/.config
-        # Fix LTO jika DISABLE-LTO=true
+        # 2. PATCH PAKSA: Pake tool resmi kernel buat set VA_BITS ke 39
+        # Hapus opsi VA_BITS lama dan paksa pakai 39
+        ./scripts/config --file out/.config -d CONFIG_ARM64_VA_BITS_47
+        ./scripts/config --file out/.config -d CONFIG_ARM64_VA_BITS_48
+        ./scripts/config --file out/.config -d CONFIG_ARM64_VA_BITS_52
+        ./scripts/config --file out/.config -e CONFIG_ARM64_VA_BITS_39
+        
+        # Sync config agar struktur kernel rapi
+        make O=out ARCH=arm64 olddefconfig
+        
+        # 3. Handling LTO jika DISABLE-LTO=true
         if [ "${{ env.DISABLE_LTO }}" = "true" ]; then
-            sed -i 's/CONFIG_LTO=y/CONFIG_LTO=n/' out/.config || echo "CONFIG_LTO=n" >> out/.config
-            echo "CONFIG_LTO_NONE=y" >> out/.config
+            ./scripts/config --file out/.config -d CONFIG_LTO
+            ./scripts/config --file out/.config -e CONFIG_LTO_NONE
         fi
         
-        # 3. Kompilasi (Pastikan pakai O=out)
+        # 4. Kompilasi utama
         make -j$(nproc --all) O=out ARCH=arm64 CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-
 
     - name: Upload Kernel
@@ -65,4 +72,3 @@ jobs:
       with:
         name: Kernel-Output
         path: kernel_workspace/android-kernel/out/arch/arm64/boot/Image*
-        
